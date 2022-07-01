@@ -172,8 +172,19 @@ RegisterNetEvent('qb-clothes:client:CreateFirstCharacter', function()
                 end
             end, config)
         end, Config.PedMenuGroup)
+        TriggerEvent("backitems:displayItems", false)
+        exports['fivem-appearance']:startPlayerCustomization(function (appearance)
+            if appearance then
+                TriggerServerEvent('fivem-appearance:save', appearance)
+                print('Player Clothing Saved')
+            else
+                print('Canceled')
+            end
+            TriggerEvent("backitems:displayItems", true)
+        end, config)
     end)
 end)
+
 
 function OpenShop(config, isPedMenu, shopType)
     QBCore.Functions.TriggerCallback("fivem-appearance:server:hasMoney", function(hasMoney, money)
@@ -193,6 +204,16 @@ function OpenShop(config, isPedMenu, shopType)
             end
         end, config)
     end, shopType)
+    TriggerEvent("backitems:displayItems", false)
+	exports['fivem-appearance']:startPlayerCustomization(function (appearance)
+		if appearance then
+			TriggerServerEvent('fivem-appearance:save', appearance)
+			print('Player Clothing Saved')
+		else
+			print('Canceled')
+		end
+		TriggerEvent("backitems:displayItems", true)
+	end, config)
 end
 
 local function OpenClothingShop(isPedMenu)
