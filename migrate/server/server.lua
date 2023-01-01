@@ -1,8 +1,8 @@
-local QBCore = exports['qb-core']:GetCoreObject()
+local QBCore = exports["qb-core"]:GetCoreObject()
 local continue = false
 
 local function MigrateFivemAppearance(source)
-    local allPlayers = MySQL.Sync.fetchAll('SELECT * FROM players')
+    local allPlayers = MySQL.Sync.fetchAll("SELECT * FROM players")
     local playerSkins = {}
     for i=1, #allPlayers, 1 do
         if allPlayers[i].skin then
@@ -14,24 +14,34 @@ local function MigrateFivemAppearance(source)
     end
 
     for i=1, #playerSkins, 1 do
-        MySQL.Async.insert('INSERT INTO playerskins (citizenid, model, skin, active) VALUES (?, ?, ?, ?)', {
+        MySQL.Async.insert("INSERT INTO playerskins (citizenid, model, skin, active) VALUES (?, ?, ?, ?)", {
             playerSkins[i].citizenID,
             json.decode(playerSkins[i].skin).model,
             playerSkins[i].skin,
             1
         })
     end
-    TriggerClientEvent("QBCore:Notify", source, "Migration finished. " .. tostring(#playerSkins) .. " skins migrated", "success")
+    lib.notify(source, {
+        title = "Success",
+        description = "Migration finished. " .. tostring(#playerSkins) .. " skins migrated",
+        type = "success",
+        position = Config.NotifyOptions.position
+    })
 end
 
 local function MigrateQBClothing(source)
-    local allPlayerSkins = MySQL.Sync.fetchAll('SELECT * FROM playerskins')
+    local allPlayerSkins = MySQL.Sync.fetchAll("SELECT * FROM playerskins")
     local migrated = 0
     for i=1, #allPlayerSkins, 1 do
         if not tonumber(allPlayerSkins[i].model) then
-            TriggerClientEvent("QBCore:Notify", source, "Skipped skin")
+            lib.notify(source, {
+                title = "Information",
+                description = "Skipped skin",
+                type = "inform",
+                position = Config.NotifyOptions.position
+            })
         else
-            TriggerClientEvent("fivem-appearance:client:migration:load-qb-clothing-skin", source, allPlayerSkins[i])
+            TriggerClientEvent("illenium-appearance:client:migration:load-qb-clothing-skin", source, allPlayerSkins[i])
             while not continue do
                 Wait(10)
             end
@@ -39,25 +49,37 @@ local function MigrateQBClothing(source)
             migrated = migrated + 1
         end
     end
-    TriggerClientEvent("fivem-appearance:client:reloadSkin", source)
-    TriggerClientEvent("QBCore:Notify", source, "Migration finished. " .. migrated .. " skins migrated", "success")
+    TriggerClientEvent("illenium-appearance:client:reloadSkin", source)
+
+    lib.notify(source, {
+        title = "Success",
+        description = "Migration finished. " .. migrated .. " skins migrated",
+        type = "success",
+        position = Config.NotifyOptions.position
+    })
 end
 
-RegisterNetEvent("fivem-appearance:server:migrate-qb-clothing-skin", function(citizenid, appearance)
+RegisterNetEvent("illenium-appearance:server:migrate-qb-clothing-skin", function(citizenid, appearance)
     local src = source
-    MySQL.Async.execute('DELETE FROM playerskins WHERE citizenid = ?', { citizenid }, function()
-        MySQL.Async.insert('INSERT INTO playerskins (citizenid, model, skin, active) VALUES (?, ?, ?, ?)', {
+    MySQL.Async.execute("DELETE FROM playerskins WHERE citizenid = ?", { citizenid }, function()
+        MySQL.Async.insert("INSERT INTO playerskins (citizenid, model, skin, active) VALUES (?, ?, ?, ?)", {
             citizenid,
             appearance.model,
             json.encode(appearance),
             1
         })
         continue = true
-        TriggerClientEvent("QBCore:Notify", src, "Migrated skin", "success")
+        lib.notify(src, {
+            id = "illenium_appearance_skin_migrated",
+            title = "Success",
+            description = "Migrated skin",
+            type = "success",
+            position = Config.NotifyOptions.position
+        })
     end)
 end)
 
-QBCore.Commands.Add('migrateskins', 'Migrate skins to fivem-appearance', {{name='type', help='fivem-appearance / qb-clothing'}}, false, function(source, args)
+QBCore.Commands.Add("migrateskins", "Migrate skins to illenium-appearance", {{name="type", help="fivem-appearance / qb-clothing"}}, false, function(source, args)
     local type = tostring(args[1])
     if type == "fivem-appearance" then
         MigrateFivemAppearance(source)
@@ -66,6 +88,11 @@ QBCore.Commands.Add('migrateskins', 'Migrate skins to fivem-appearance', {{name=
             MigrateQBClothing(source)
         end)
     else
-        TriggerClientEvent("QBCore:Notify", source, "Invalid type", "error")
+        lib.notify(source, {
+            title = "Error",
+            description = "Invalid type",
+            type = "error",
+            position = Config.NotifyOptions.position
+        })
     end
-end, 'god')
+end, "god")

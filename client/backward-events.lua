@@ -1,4 +1,4 @@
-local QBCore = exports['qb-core']:GetCoreObject()
+local QBCore = exports["qb-core"]:GetCoreObject()
 
 local resourceName = GetCurrentResourceName()
 
@@ -17,8 +17,8 @@ end
 
 -- Backwards Compatible Events
 
-RegisterNetEvent('qb-clothing:client:openMenu', function()
-    local config = getDefaultConfig()
+RegisterNetEvent("qb-clothing:client:openMenu", function()
+    local config = GetDefaultConfig()
     config.ped = true
     config.headBlend = true
     config.faceFeatures = true
@@ -26,14 +26,14 @@ RegisterNetEvent('qb-clothing:client:openMenu', function()
     config.components = true
     config.props = true
     config.tattoos = true
-    OpenShop(config, true, 'all')
+    OpenShop(config, true, "all")
 end)
 
-RegisterNetEvent('qb-clothing:client:openOutfitMenu', function()
-    OpenMenu(nil, "qb-clothing:client:openOutfitMenu", "outfit")
+RegisterNetEvent("qb-clothing:client:openOutfitMenu", function()
+    OpenMenu(nil, "outfit")
 end)
 
-RegisterNetEvent('qb-clothing:client:loadOutfit', function(oData)
+RegisterNetEvent("qb-clothing:client:loadOutfit", function(oData)
     local ped = PlayerPedId()
 
     local data = oData.outfitData
@@ -140,7 +140,7 @@ RegisterNetEvent('qb-clothing:client:loadOutfit', function(oData)
     end
 
     if Config.PersistUniforms and length > 1 then
-        TriggerServerEvent("fivem-appearance:server:syncUniform", {
+        TriggerServerEvent("illenium-appearance:server:syncUniform", {
             jobName = oData.jobName,
             gender = oData.gender,
             label = oData.name
@@ -153,5 +153,5 @@ RegisterNetEvent("qb-multicharacter:client:chooseChar", function()
     exports[resourceName]:setPedTattoos(ped, {})
     ClearPedDecorations(ped)
 
-    TriggerServerEvent("fivem-appearance:server:resetOutfitCache")
+    TriggerServerEvent("illenium-appearance:server:resetOutfitCache")
 end)

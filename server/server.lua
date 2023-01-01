@@ -1,4 +1,4 @@
-local QBCore = exports['qb-core']:GetCoreObject()
+local QBCore = exports["qb-core"]:GetCoreObject()
 
 local outfitCache = {}
 local uniformCache = {}
@@ -20,11 +20,11 @@ end
 
 local function getOutfitsForPlayer(citizenid)
     outfitCache[citizenid] = {}
-    local result = MySQL.Sync.fetchAll('SELECT * FROM player_outfits WHERE citizenid = ?', {citizenid})
+    local result = MySQL.Sync.fetchAll("SELECT * FROM player_outfits WHERE citizenid = ?", {citizenid})
     for i = 1, #result, 1 do
         outfitCache[citizenid][#outfitCache[citizenid] + 1] = {
             id = result[i].id,
-            outfitname = result[i].outfitname,
+            name = result[i].outfitname,
             model = result[i].model,
             components = json.decode(result[i].components),
             props = json.decode(result[i].props)
@@ -34,44 +34,42 @@ end
 
 -- Callback(s)
 
-QBCore.Functions.CreateCallback('fivem-appearance:server:getAppearance', function(source, cb, model)
+lib.callback.register("illenium-appearance:server:getAppearance", function(source, model)
     local Player = QBCore.Functions.GetPlayer(source)
-    local query = 'SELECT skin FROM playerskins WHERE citizenid = ?'
+    local query = "SELECT skin FROM playerskins WHERE citizenid = ?"
     local queryArgs = {Player.PlayerData.citizenid}
     if model ~= nil then
-        query = query .. ' AND model = ?'
+        query = query .. " AND model = ?"
         queryArgs[#queryArgs + 1] = model
     else
-        query = query .. ' AND active = ?'
+        query = query .. " AND active = ?"
         queryArgs[#queryArgs + 1] = 1
     end
     local result = MySQL.Sync.fetchAll(query, queryArgs)
     if result[1] ~= nil then
-        cb(json.decode(result[1].skin))
-    else
-        cb(nil)
+        return json.decode(result[1].skin)
     end
 end)
 
-QBCore.Functions.CreateCallback('fivem-appearance:server:hasMoney', function(source, cb, shopType)
+lib.callback.register("illenium-appearance:server:hasMoney", function(source, shopType)
     local Player = QBCore.Functions.GetPlayer(source)
     local money = getMoneyForShop(shopType)
     if Player.PlayerData.money.cash >= money then
-        cb(true, money)
+        return true, money
     else
-        cb(false, money)
+        return false, money
     end
 end)
 
-QBCore.Functions.CreateCallback('fivem-appearance:server:getOutfits', function(source, cb)
+lib.callback.register("illenium-appearance:server:getOutfits", function(source)
     local Player = QBCore.Functions.GetPlayer(source)
     if outfitCache[Player.PlayerData.citizenid] == nil then
         getOutfitsForPlayer(Player.PlayerData.citizenid)
     end
-    cb(outfitCache[Player.PlayerData.citizenid])
+    return outfitCache[Player.PlayerData.citizenid]
 end)
 
-QBCore.Functions.CreateCallback("fivem-appearance:server:getManagementOutfits", function(source, cb, mType, gender)
+lib.callback.register("illenium-appearance:server:getManagementOutfits", function(source, mType, gender)
     local Player = QBCore.Functions.GetPlayer(source)
     local jobName = Player.PlayerData.job.name
     local grade = Player.PlayerData.job.grade.level
@@ -104,39 +102,49 @@ QBCore.Functions.CreateCallback("fivem-appearance:server:getManagementOutfits", 
             }
         end
     end
-    cb(managementOutfits)
+    return managementOutfits
 end)
 
-QBCore.Functions.CreateCallback("fivem-appearance:server:getUniform", function(source, cb)
+lib.callback.register("illenium-appearance:server:getUniform", function(source)
     local Player = QBCore.Functions.GetPlayer(source)
-    cb(uniformCache[Player.PlayerData.citizenid])
+    return uniformCache[Player.PlayerData.citizenid]
 end)
 
-RegisterServerEvent("fivem-appearance:server:saveAppearance", function(appearance)
+RegisterServerEvent("illenium-appearance:server:saveAppearance", function(appearance)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if appearance ~= nil then
         MySQL.update.await("UPDATE playerskins SET active = 0 WHERE citizenid = ?", {Player.PlayerData.citizenid}) -- Make all the skins inactive
-        MySQL.Async.execute('DELETE FROM playerskins WHERE citizenid = ? AND model = ?',
+        MySQL.Async.execute("DELETE FROM playerskins WHERE citizenid = ? AND model = ?",
             {Player.PlayerData.citizenid, appearance.model}, function()
-                MySQL.Async.insert('INSERT INTO playerskins (citizenid, model, skin, active) VALUES (?, ?, ?, ?)',
+                MySQL.Async.insert("INSERT INTO playerskins (citizenid, model, skin, active) VALUES (?, ?, ?, ?)",
                     {Player.PlayerData.citizenid, appearance.model, json.encode(appearance), 1})
             end)
     end
 end)
 
-RegisterServerEvent("fivem-appearance:server:chargeCustomer", function(shopType)
+RegisterServerEvent("illenium-appearance:server:chargeCustomer", function(shopType)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     local money = getMoneyForShop(shopType)
-    if Player.Functions.RemoveMoney('cash', money) then
-        TriggerClientEvent("QBCore:Notify", src, "Gave $" .. money .. " to " .. shopType .. "!", "success")
+    if Player.Functions.RemoveMoney("cash", money) then
+        lib.notify(src, {
+            title = "Success",
+            description = "Gave $" .. money .. " to " .. shopType .. "!",
+            type = "success",
+            position = Config.NotifyOptions.position
+        })
     else
-        TriggerClientEvent("QBCore:Notify", src, "You didn't have enough money! Tried to exploit the system!", "error")
+        lib.notify(src, {
+            title = "Exploit!",
+            description = "You didn't have enough money! Tried to exploit the system!",
+            type = "error",
+            position = Config.NotifyOptions.position
+        })
     end
 end)
 
-RegisterNetEvent('fivem-appearance:server:saveOutfit', function(name, model, components, props)
+RegisterNetEvent("illenium-appearance:server:saveOutfit", function(name, model, components, props)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if outfitCache[Player.PlayerData.citizenid] == nil then
@@ -144,21 +152,26 @@ RegisterNetEvent('fivem-appearance:server:saveOutfit', function(name, model, com
     end
     if model and components and props then
         MySQL.Async.insert(
-            'INSERT INTO player_outfits (citizenid, outfitname, model, components, props) VALUES (?, ?, ?, ?, ?)',
+            "INSERT INTO player_outfits (citizenid, outfitname, model, components, props) VALUES (?, ?, ?, ?, ?)",
             {Player.PlayerData.citizenid, name, model, json.encode(components), json.encode(props)}, function(id)
                 outfitCache[Player.PlayerData.citizenid][#outfitCache[Player.PlayerData.citizenid] + 1] = {
                     id = id,
-                    outfitname = name,
+                    name = name,
                     model = model,
                     components = components,
                     props = props
                 }
-                TriggerClientEvent('QBCore:Notify', src, 'Outfit ' .. name .. ' has been saved', 'success')
+                lib.notify(src, {
+                    title = "Success",
+                    description = "Outfit " .. name .. " has been saved",
+                    type = "success",
+                    position = Config.NotifyOptions.position
+                })
             end)
     end
 end)
 
-RegisterNetEvent("fivem-appearance:server:saveManagementOutfit", function(outfitData)
+RegisterNetEvent("illenium-appearance:server:saveManagementOutfit", function(outfitData)
     local src = source
 
     MySQL.Async.insert("INSERT INTO management_outfits (job_name, type, minrank, name, gender, model, props, components) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -173,24 +186,29 @@ RegisterNetEvent("fivem-appearance:server:saveManagementOutfit", function(outfit
             json.encode(outfitData.Components)
         },
         function()
-            TriggerClientEvent('QBCore:Notify', src, 'Outfit ' .. outfitData.Name .. ' has been saved', 'success')
+            lib.notify(src, {
+                title = "Success",
+                description = "Outfit " .. outfitData.Name .. " has been saved",
+                type = "success",
+                position = Config.NotifyOptions.position
+            })
         end)
 end)
 
-RegisterNetEvent("fivem-appearance:server:deleteManagementOutfit", function(id)
+RegisterNetEvent("illenium-appearance:server:deleteManagementOutfit", function(id)
     MySQL.query("DELETE FROM management_outfits WHERE id = ?", {id})
 end)
 
-RegisterNetEvent("fivem-appearance:server:syncUniform", function(uniform)
+RegisterNetEvent("illenium-appearance:server:syncUniform", function(uniform)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     uniformCache[Player.PlayerData.citizenid] = uniform
 end)
 
-RegisterNetEvent('fivem-appearance:server:deleteOutfit', function(id)
+RegisterNetEvent("illenium-appearance:server:deleteOutfit", function(id)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
-    MySQL.query('DELETE FROM player_outfits WHERE id = ?', {id})
+    MySQL.query("DELETE FROM player_outfits WHERE id = ?", {id})
 
     for k, v in ipairs(outfitCache[Player.PlayerData.citizenid]) do
         if v.id == id then
@@ -200,7 +218,7 @@ RegisterNetEvent('fivem-appearance:server:deleteOutfit', function(id)
     end
 end)
 
-RegisterNetEvent("fivem-appearance:server:resetOutfitCache", function()
+RegisterNetEvent("illenium-appearance:server:resetOutfitCache", function()
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if Player then
@@ -209,30 +227,32 @@ RegisterNetEvent("fivem-appearance:server:resetOutfitCache", function()
 end)
 
 if Config.EnablePedMenu then
-    QBCore.Commands.Add('pedmenu', 'Open Ped Menu', {{
-        name = 'id',
-        help = '[Optional] ID of player (Gives you the ped menu if not provided)'
-    }}, false, function(source, args)
-        local src = source
-        local playerId = tonumber(args[1])
-        if playerId then
-            local Player = QBCore.Functions.GetPlayer(playerId)
+    lib.addCommand(Config.PedMenuGroup, "pedmenu", function(source, args)
+        local target = source
+        if args.playerID then
+            local Player = QBCore.Functions.GetPlayer(args.playerID)
             if Player then
-                src = playerId
+                target = args.playerID
             else
-                TriggerClientEvent('QBCore:Notify', src, "Player not online", 'error')
+                lib.notify(source, {
+                    title = "Error",
+                    description = "Player not online",
+                    type = "error",
+                    position = Config.NotifyOptions.position
+                })
                 return
             end
         end
-
-        TriggerClientEvent("fivem-appearance:client:openClothingShopMenu", src, true)
-    end, Config.PedMenuGroup)
+        TriggerClientEvent("illenium-appearance:client:openClothingShopMenu", target, true)
+    end, {"playerID:?number"}, "Open / Give Clothing Menu")
 end
 
-QBCore.Commands.Add('reloadskin', 'Reloads your character', {}, false, function(source, _)
-    TriggerClientEvent("fivem-appearance:client:reloadSkin", source)
-end)
+lib.addCommand(false, "reloadskin", function(source)
+    TriggerClientEvent("illenium-appearance:client:reloadSkin", source)
+end, nil, "Reloads your character")
 
-QBCore.Commands.Add('clearstuckprops', 'Removes all the props attached to the entity', {}, false, function(source, _)
-    TriggerClientEvent("fivem-appearance:client:ClearStuckProps", source)
-end)
+lib.addCommand(false, "clearstuckprops", function(source)
+    TriggerClientEvent("illenium-appearance:client:ClearStuckProps", source)
+end, nil, "Removes all the props attached to the entity")
+
+lib.versionCheck('iLLeniumStudios/illenium-appearance')
