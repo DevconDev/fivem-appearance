@@ -1,13 +1,7 @@
-local QBCore = exports["qb-core"]:GetCoreObject()
-
 local client = client
 
 local currentZone = nil
-local zoneName = nil
-
 local MenuItemId = nil
-
-local PlayerData = {}
 
 local ManagementItemIDs = {
     Gang = nil,
@@ -22,22 +16,11 @@ local TargetPeds = {
     PlayerOutfitRoom = {}
 }
 
-local Zones = {}
-
-local function getGender()
-    local gender
-    if Config.GenderBasedOnPed then
-        local model = client.getPedModel(PlayerPedId())
-        if model == "mp_f_freemode_01" then
-            gender = "female"
-        end
-    else
-        if PlayerData.charinfo.gender == 1 then
-            gender = "female"
-        end
-    end
-    return gender or "male"
-end
+local Zones = {
+    Store = {},
+    ClothingRoom = {},
+    PlayerOutfitRoom = {}
+}
 
 local function RemoveTargetPeds(peds)
     for i = 1, #peds, 1 do
@@ -50,7 +33,7 @@ local function RemoveTargets()
         RemoveTargetPeds(TargetPeds.Store)
     else
         for k, v in pairs(Config.Stores) do
-            exports["qb-target"]:RemoveZone(v.type .. k)
+            Target.RemoveZone(v.type .. k)
         end
     end
 
@@ -58,7 +41,7 @@ local function RemoveTargets()
         RemoveTargetPeds(TargetPeds.ClothingRoom)
     else
         for k, v in pairs(Config.ClothingRooms) do
-            exports["qb-target"]:RemoveZone("clothing_" .. (v.job or v.gang) .. k)
+            Target.RemoveZone("clothing_" .. (v.job or v.gang) .. k)
         end
     end
 
@@ -66,7 +49,7 @@ local function RemoveTargets()
         RemoveTargetPeds(TargetPeds.PlayerOutfitRoom)
     else
         for k in pairs(Config.PlayerOutfitRooms) do
-            exports["qb-target"]:RemoveZone("playeroutfitroom_" .. k)
+            Target.RemoveZone("playeroutfitroom_" .. k)
         end
     end
 end
@@ -89,7 +72,7 @@ local function LoadPlayerUniform()
             return
         end
         if Config.BossManagedOutfits then
-            local result = lib.callback.await("illenium-appearance:server:getManagementOutfits", false, uniformData.type, getGender())
+            local result = lib.callback.await("illenium-appearance:server:getManagementOutfits", false, uniformData.type, Framework.GetGender())
             local uniform = nil
             for i = 1, #result, 1 do
                 if result[i].name == uniformData.name then
@@ -109,7 +92,7 @@ local function LoadPlayerUniform()
                 TriggerServerEvent("illenium-appearance:server:syncUniform", nil) -- Uniform doesn't exist anymore
                 return
             end
-    
+
             TriggerEvent("illenium-appearance:client:changeOutfit", uniform)
         else
             local outfits = Config.Outfits[uniformData.jobName][uniformData.gender]
@@ -129,15 +112,9 @@ local function LoadPlayerUniform()
             uniform.jobName = uniformData.jobName
             uniform.gender = uniformData.gender
 
-            TriggerEvent("qb-clothing:client:loadOutfit", uniform)
+            TriggerEvent("illenium-appearance:client:loadJobOutfit", uniform)
         end
     end)
-end
-
-local function ResetRechargeMultipliers()
-    local player = PlayerId()
-    SetPlayerHealthRechargeMultiplier(player, 0.0)
-    SetPlayerHealthRechargeLimit(player, 0.0)
 end
 
 local function RemoveManagementMenuItems()
@@ -177,28 +154,20 @@ local function RemoveRadialMenuOption()
     end
 end
 
-local function InitAppearance()
-    PlayerData = QBCore.Functions.GetPlayerData()
-    client.job = PlayerData.job
-    client.gang = PlayerData.gang
-
+function InitAppearance()
+    Framework.UpdatePlayerData()
     lib.callback("illenium-appearance:server:getAppearance", false, function(appearance)
         if not appearance then
             return
         end
+
+        BackupPlayerStats()
+
         client.setPlayerAppearance(appearance)
         if Config.PersistUniforms then
             LoadPlayerUniform()
         end
-        ResetRechargeMultipliers()
-
-        if Config.Debug then -- This will detect if the player model is set as "player_zero" aka michael. Will then set the character as a freemode ped based on gender.
-            Wait(5000)
-            if GetEntityModel(PlayerPedId()) == `player_zero` then
-                print('Player detected as "player_zero", Starting CreateFirstCharacter event')
-                TriggerEvent("qb-clothes:client:CreateFirstCharacter")
-            end
-        end
+        RestorePlayerStats()
     end)
     ResetBlips()
     if Config.BossManagedOutfits then
@@ -214,7 +183,7 @@ end)
 
 AddEventHandler("onResourceStop", function(resource)
     if resource == GetCurrentResourceName() then
-        if Config.UseTarget and GetResourceState("qb-target") == "started" then
+        if Config.UseTarget and Target.IsTargetStarted() then
             RemoveTargets()
         else
             RemoveZones()
@@ -226,26 +195,6 @@ AddEventHandler("onResourceStop", function(resource)
             RemoveManagementMenuItems()
         end
     end
-end)
-
-RegisterNetEvent("QBCore:Client:OnJobUpdate", function(JobInfo)
-    PlayerData.job = JobInfo
-    client.job = JobInfo
-    ResetBlips()
-end)
-
-RegisterNetEvent("QBCore:Client:OnGangUpdate", function(GangInfo)
-    PlayerData.gang = GangInfo
-    client.gang = GangInfo
-    ResetBlips()
-end)
-
-RegisterNetEvent("QBCore:Client:SetDuty", function(duty)
-    client.job.onduty = duty
-end)
-
-RegisterNetEvent("QBCore:Client:OnPlayerLoaded", function()
-    InitAppearance()
 end)
 
 
@@ -260,36 +209,37 @@ local function getNewCharacterConfig()
     config.headOverlays = Config.NewCharacterSections.HeadOverlays
     config.components   = Config.NewCharacterSections.Components
     config.props        = Config.NewCharacterSections.Props
-    config.tattoos      = Config.NewCharacterSections.Tattoos
+    config.tattoos      = not Config.RCoreTattoosCompatibility and Config.NewCharacterSections.Tattoos
 
     return config
 end
 
-RegisterNetEvent("qb-clothes:client:CreateFirstCharacter", function()
-    QBCore.Functions.GetPlayerData(function(pd)
-        local gender = "Male"
-        local skin = "mp_m_freemode_01"
-        if pd.charinfo.gender == 1 then
-            skin = "mp_f_freemode_01"
-            gender = "Female"
-        end
-        client.setPlayerModel(skin)
-        -- Fix for tattoo's appearing when creating a new character
-        local ped = PlayerPedId()
-        client.setPedTattoos(ped, {})
-        client.setPedComponents(ped, Config.InitialPlayerClothes[gender].Components)
-        client.setPedProps(ped, Config.InitialPlayerClothes[gender].Props)
-        client.setPedHair(ped, Config.InitialPlayerClothes[gender].Hair)
-        ClearPedDecorations(ped)
-        local config = getNewCharacterConfig()
-        client.startPlayerCustomization(function(appearance)
-            if (appearance) then
-                TriggerServerEvent("illenium-appearance:server:saveAppearance", appearance)
-                ResetRechargeMultipliers()
+function InitializeCharacter(gender, onSubmit, onCancel)
+    local skin = "mp_m_freemode_01"
+    if gender == "Female" then
+        skin = "mp_f_freemode_01"
+    end
+    client.setPlayerModel(skin)
+    -- Fix for tattoo's appearing when creating a new character
+    local ped = PlayerPedId()
+    client.setPedTattoos(ped, {})
+    client.setPedComponents(ped, Config.InitialPlayerClothes[gender].Components)
+    client.setPedProps(ped, Config.InitialPlayerClothes[gender].Props)
+    client.setPedHair(ped, Config.InitialPlayerClothes[gender].Hair, {})
+    ClearPedDecorations(ped)
+    local config = getNewCharacterConfig()
+    client.startPlayerCustomization(function(appearance)
+        if (appearance) then
+            TriggerServerEvent("illenium-appearance:server:saveAppearance", appearance)
+            if onSubmit then
+                onSubmit()
             end
-        end, config)
-    end)
-end)
+        elseif onCancel then
+            onCancel()
+        end
+        Framework.CachePed()
+    end, config)
+end
 
 
 function OpenShop(config, isPedMenu, shopType)
@@ -318,6 +268,7 @@ function OpenShop(config, isPedMenu, shopType)
                     position = Config.NotifyOptions.position
                 })
             end
+            Framework.CachePed()
         end, config)
     end, shopType)
     TriggerEvent("backitems:displayItems", false)
@@ -342,7 +293,7 @@ local function OpenClothingShop(isPedMenu)
         config.headBlend = true
         config.faceFeatures = true
         config.headOverlays = true
-        config.tattoos = true
+        config.tattoos = not Config.RCoreTattoosCompatibility and true
     end
     OpenShop(config, isPedMenu, "clothing")
 end
@@ -367,6 +318,72 @@ local function OpenSurgeonShop()
 end
 
 RegisterNetEvent("illenium-appearance:client:openClothingShop", OpenClothingShop)
+
+RegisterNetEvent("illenium-appearance:client:importOutfitCode", function()
+    local response = lib.inputDialog("Enter outfit code", {
+        {
+            type = "input",
+            label = "Name the Outfit",
+            placeholder = "A nice outfit",
+            default = "Imported Outfit"
+        },
+        {
+            type = "input",
+            label = "Outfit Code",
+            placeholder = "XXXXXXXXXXXX"
+        }
+    })
+
+    if not response then
+        return
+    end
+
+    local outfitName = response[1]
+    local outfitCode = response[2]
+    if outfitCode ~= nil then
+        Wait(500)
+        lib.callback("illenium-appearance:server:importOutfitCode", false, function(success)
+            if success then
+                lib.notify({
+                    title = "Outfit Imported",
+                    description = "You can now change to the outfit using the outfit menu",
+                    type = "success",
+                    position = Config.NotifyOptions.position
+                })
+            else
+                lib.notify({
+                    title = "Import Failure",
+                    description = "Invalid outfit code",
+                    type = "error",
+                    position = Config.NotifyOptions.position
+                })
+            end
+        end, outfitName, outfitCode)
+    end
+end)
+
+RegisterNetEvent("illenium-appearance:client:generateOutfitCode", function(id)
+    lib.callback("illenium-appearance:server:generateOutfitCode", false, function(code)
+        if not code then
+            lib.notify({
+                title = "Something went wrong",
+                description = "Code generation failed for the outfit",
+                type = "error",
+                position = Config.NotifyOptions.position
+            })
+            return
+        end
+        lib.setClipboard(code)
+        lib.inputDialog("Outfit Code Generated", {
+            {
+                type = "input",
+                label = "Here is your outfit code",
+                default = code,
+                disabled = true
+            }
+        })
+    end, id)
+end)
 
 RegisterNetEvent("illenium-appearance:client:saveOutfit", function()
     local response = lib.inputDialog("Name your outfit", {
@@ -439,6 +456,25 @@ local function RegisterChangeOutfitMenu(id, parent, outfits, mType)
     lib.registerContext(changeOutfitMenu)
 end
 
+local function RegisterGenerateOutfitCodeMenu(id, parent, outfits)
+    local generateOutfitCodeMenu = {
+        id = id,
+        title = "Generate Outfit Code",
+        menu = parent,
+        options = {}
+    }
+    for i = 1, #outfits, 1 do
+        generateOutfitCodeMenu.options[#generateOutfitCodeMenu.options + 1] = {
+            title = outfits[i].name,
+            description = outfits[i].model,
+            event = "illenium-appearance:client:generateOutfitCode",
+            args = outfits[i].id
+        }
+    end
+
+    lib.registerContext(generateOutfitCodeMenu)
+end
+
 local function RegisterDeleteOutfitMenu(id, parent, outfits, deleteEvent)
     local deleteOutfitMenu = {
         id = id,
@@ -464,7 +500,7 @@ RegisterNetEvent("illenium-appearance:client:OutfitManagementMenu", function(arg
         bossMenuEvent = "qb-gangmenu:client:OpenMenu"
     end
 
-    local outfits = lib.callback.await("illenium-appearance:server:getManagementOutfits", false, args.type, getGender())
+    local outfits = lib.callback.await("illenium-appearance:server:getManagementOutfits", false, args.type, Framework.GetGender())
     local managementMenuID = "illenium_appearance_outfit_management_menu"
     local changeManagementOutfitMenuID = "illenium_appearance_change_management_outfit_menu"
     local deleteManagementOutfitMenuID = "illenium_appearance_delete_management_outfit_menu"
@@ -503,17 +539,6 @@ RegisterNetEvent("illenium-appearance:client:OutfitManagementMenu", function(arg
     lib.showContext(managementMenuID)
 end)
 
-local function getRankInputValues(rankList)
-    local rankValues = {}
-    for k, v in pairs(rankList) do
-        rankValues[#rankValues + 1] = {
-            label = v.name,
-            value = k
-        }
-    end
-    return rankValues
-end
-
 RegisterNetEvent("illenium-appearance:client:SaveManagementOutfit", function(mType)
     local playerPed = PlayerPedId()
     local outfitData = {
@@ -524,14 +549,14 @@ RegisterNetEvent("illenium-appearance:client:SaveManagementOutfit", function(mTy
     }
 
     local rankValues
-    
+
     if mType == "Job" then
         outfitData.JobName = client.job.name
-        rankValues = getRankInputValues(QBCore.Shared.Jobs[client.job.name].grades)
-        
+        rankValues = Framework.GetRankInputValues("job")
+
     else
         outfitData.JobName = client.gang.name
-        rankValues = getRankInputValues(QBCore.Shared.Gangs[client.gang.name].grades)
+        rankValues = Framework.GetRankInputValues("gang")
     end
 
     local dialogResponse = lib.inputDialog("Management Outfit Details", {
@@ -580,7 +605,7 @@ local function RegisterWorkOutfitsListMenu(id, parent, menuData)
         title = "Work Outfits",
         options = {}
     }
-    local event = "qb-clothing:client:loadOutfit"
+    local event = "illenium-appearance:client:loadJobOutfit"
     if Config.BossManagedOutfits then
         event = "illenium-appearance:client:changeOutfit"
     end
@@ -606,9 +631,11 @@ function OpenMenu(isPedMenu, menuType, menuData)
     local outfits = lib.callback.await("illenium-appearance:server:getOutfits", false)
     local changeOutfitMenuID = "illenium_appearance_change_outfit_menu"
     local deleteOutfitMenuID = "illenium_appearance_delete_outfit_menu"
+    local generateOutfitCodeMenuID = "illenium_appearance_generate_outfit_code_menu"
 
     RegisterChangeOutfitMenu(changeOutfitMenuID, mainMenuID, outfits)
     RegisterDeleteOutfitMenu(deleteOutfitMenuID, mainMenuID, outfits, "illenium-appearance:client:deleteOutfit")
+    RegisterGenerateOutfitCodeMenu(generateOutfitCodeMenuID, mainMenuID, outfits)
     local outfitMenuItems = {
         {
             title = "Change Outfit",
@@ -621,9 +648,19 @@ function OpenMenu(isPedMenu, menuType, menuData)
             event = "illenium-appearance:client:saveOutfit"
         },
         {
+            title = "Generate Outfit Code",
+            description = "Generate an outfit code for sharing",
+            menu = generateOutfitCodeMenuID
+        },
+        {
             title = "Delete Outfit",
             description = "Delete any of your saved outfits",
             menu = deleteOutfitMenuID
+        },
+        {
+            title = "Import Outfit",
+            description = "Import an outfit from a sharing code",
+            event = "illenium-appearance:client:importOutfitCode"
         }
     }
     if menuType == "default" then
@@ -695,9 +732,10 @@ RegisterNetEvent("illenium-appearance:client:changeOutfit", function(data)
     if pedModel ~= data.model then
         local p = promise.new()
         lib.callback("illenium-appearance:server:getAppearance", false, function(appearance)
+            BackupPlayerStats()
             if appearance then
                 client.setPlayerAppearance(appearance)
-                ResetRechargeMultipliers()
+                RestorePlayerStats()
             else
                 lib.notify({
                     title = "Something went wrong",
@@ -716,7 +754,7 @@ RegisterNetEvent("illenium-appearance:client:changeOutfit", function(data)
         playerPed = PlayerPedId()
         client.setPedComponents(playerPed, data.components)
         client.setPedProps(playerPed, data.props)
-        client.setPedHair(playerPed, appearanceDB.hair)
+        client.setPedHair(playerPed, appearanceDB.hair, appearanceDB.tattoos)
 
         if data.disableSave then
             TriggerServerEvent("illenium-appearance:server:syncUniform", {
@@ -727,6 +765,7 @@ RegisterNetEvent("illenium-appearance:client:changeOutfit", function(data)
             local appearance = client.getPedAppearance(playerPed)
             TriggerServerEvent("illenium-appearance:server:saveAppearance", appearance)
         end
+        Framework.CachePed()
     end
 end)
 
@@ -758,14 +797,10 @@ local function InCooldown()
     return (GetGameTimer() - reloadSkinTimer) < Config.ReloadSkinCooldown
 end
 
-local function CheckPlayerMeta()
-    return PlayerData.metadata["isdead"] or PlayerData.metadata["inlaststand"] or PlayerData.metadata["ishandcuffed"]
-end
-
 RegisterNetEvent("illenium-appearance:client:reloadSkin", function()
     local playerPed = PlayerPedId()
 
-    if InCooldown() or CheckPlayerMeta() or IsPedInAnyVehicle(playerPed, true) or IsPedFalling(playerPed) then
+    if InCooldown() or Framework.CheckPlayerMeta() or IsPedInAnyVehicle(playerPed, true) or IsPedFalling(playerPed) then
         lib.notify({
             title = "Error",
             description = "You cannot use reloadskin right now",
@@ -776,10 +811,7 @@ RegisterNetEvent("illenium-appearance:client:reloadSkin", function()
     end
 
     reloadSkinTimer = GetGameTimer()
-
-    local health = GetEntityHealth(playerPed)
-    local maxhealth = GetEntityMaxHealth(playerPed)
-    local armour = GetPedArmour(playerPed)
+    BackupPlayerStats()
 
     lib.callback("illenium-appearance:server:getAppearance", false, function(appearance)
         if not appearance then
@@ -789,17 +821,12 @@ RegisterNetEvent("illenium-appearance:client:reloadSkin", function()
         if Config.PersistUniforms then
             TriggerServerEvent("illenium-appearance:server:syncUniform", nil)
         end
-        playerPed = PlayerPedId()
-        SetPedMaxHealth(playerPed, maxhealth)
-        Wait(1000) -- Safety Delay
-        SetEntityHealth(playerPed, health)
-        SetPedArmour(playerPed, armour)
-        ResetRechargeMultipliers()
+        RestorePlayerStats()
     end)
 end)
 
 RegisterNetEvent("illenium-appearance:client:ClearStuckProps", function()
-    if InCooldown() or CheckPlayerMeta() then
+    if InCooldown() or Framework.CheckPlayerMeta() then
         lib.notify({
             title = "Error",
             description = "You cannot use clearstuckprops right now",
@@ -827,22 +854,22 @@ RegisterNetEvent("qb-radialmenu:client:onRadialmenuOpen", function()
         return
     end
     local event, title
-    if string.find(zoneName, "ClothingRooms_") then
+    if currentZone.name == "clothingRoom" then
         event = "illenium-appearance:client:OpenClothingRoom"
         title = "Clothing Room"
-    elseif string.find(zoneName, "PlayerOutfitRooms_") then
+    elseif currentZone.name == "playerOutfitRoom" then
         event = "illenium-appearance:client:OpenPlayerOutfitRoom"
         title = "Player Outfits"
-    elseif zoneName == "clothing" then
+    elseif currentZone.name == "clothing" then
         event = "illenium-appearance:client:openClothingShopMenu"
         title = "Clothing Shop"
-    elseif zoneName == "barber" then
+    elseif currentZone.name == "barber" then
         event = "illenium-appearance:client:OpenBarberShop"
         title = "Barber Shop"
-    elseif zoneName == "tattoo" then
+    elseif currentZone.name == "tattoo" then
         event = "illenium-appearance:client:OpenTattooShop"
         title = "Tattoo Shop"
-    elseif zoneName == "surgeon" then
+    elseif currentZone.name == "surgeon" then
         event = "illenium-appearance:client:OpenSurgeonShop"
         title = "Surgeon Shop"
     end
@@ -861,7 +888,7 @@ local function isPlayerAllowedForOutfitRoom(outfitRoom)
     local isAllowed = false
     local count = #outfitRoom.citizenIDs
     for i = 1, count, 1 do
-        if outfitRoom.citizenIDs[i] == PlayerData.citizenid then
+        if Framework.IsPlayerAllowed(outfitRoom.citizenIDs[i]) then
             isAllowed = true
             break
         end
@@ -878,8 +905,8 @@ end
 
 local function getPlayerJobOutfits(clothingRoom)
     local outfits = {}
-    local gender = getGender()
-    local gradeLevel = clothingRoom.job and client.job.grade.level or client.gang.grade.level
+    local gender = Framework.GetGender()
+    local gradeLevel = clothingRoom.job and Framework.GetJobGrade() or Framework.GetGangGrade()
     local jobName = clothingRoom.job and client.job.name or client.gang.name
 
     if Config.BossManagedOutfits then
@@ -911,13 +938,13 @@ local function getPlayerJobOutfits(clothingRoom)
 end
 
 RegisterNetEvent("illenium-appearance:client:OpenClothingRoom", function()
-    local clothingRoom = Config.ClothingRooms[tonumber(string.sub(zoneName, 15))]
+    local clothingRoom = Config.ClothingRooms[currentZone.index]
     local outfits = getPlayerJobOutfits(clothingRoom)
     TriggerEvent("illenium-appearance:client:openJobOutfitsMenu", outfits)
 end)
 
 RegisterNetEvent("illenium-appearance:client:OpenPlayerOutfitRoom", function()
-    local outfitRoom = Config.PlayerOutfitRooms[tonumber(string.sub(zoneName, 19))]
+    local outfitRoom = Config.PlayerOutfitRooms[currentZone.index]
     OpenOutfitRoom(outfitRoom)
 end)
 
@@ -936,13 +963,13 @@ end
 local function onStoreEnter(data)
     local index = lookupZoneIndexFromID(Zones.Store, data.id)
     local store = Config.Stores[index]
-    currentZone = {
-        name = store.type,
-        index = index
-    }
 
     local jobName = (store.job and client.job.name) or (store.gang and client.gang.name)
     if jobName == (store.job or store.gang) then
+        currentZone = {
+            name = store.type,
+            index = index
+        }
         local prefix = Config.UseRadialMenu and "" or "[E] "
         if currentZone.name == "clothing" then
             lib.showTextUI(prefix .. "Clothing Store - Price: $" .. Config.ClothingCost, Config.TextUIOptions)
@@ -959,14 +986,14 @@ end
 local function onClothingRoomEnter(data)
     local index = lookupZoneIndexFromID(Zones.ClothingRoom, data.id)
     local clothingRoom = Config.ClothingRooms[index]
-    currentZone = {
-        name = "clothingRoom",
-        index = index
-    }
 
     local jobName = clothingRoom.job and client.job.name or client.gang.name
     if jobName == (clothingRoom.job or clothingRoom.gang) then
         if CheckDuty() or clothingRoom.gang then
+            currentZone = {
+                name = "clothingRoom",
+                index = index
+            }
             local prefix = Config.UseRadialMenu and "" or "[E] "
             lib.showTextUI(prefix .. "Clothing Room", Config.TextUIOptions)
         end
@@ -976,13 +1003,13 @@ end
 local function onPlayerOutfitRoomEnter(data)
     local index = lookupZoneIndexFromID(Zones.PlayerOutfitRoom, data.id)
     local playerOutfitRoom = Config.PlayerOutfitRooms[index]
-    currentZone = {
-        name = "playerOutfitRoom",
-        index = index
-    }
 
     local isAllowed = isPlayerAllowedForOutfitRoom(playerOutfitRoom)
     if isAllowed then
+        currentZone = {
+            name = "playerOutfitRoom",
+            index = index
+        }
         local prefix = Config.UseRadialMenu and "" or "[E] "
         lib.showTextUI(prefix .. "Outfits", Config.TextUIOptions)
     end
@@ -994,6 +1021,10 @@ local function onZoneExit()
 end
 
 local function SetupZone(store, onEnter, onExit)
+    if Config.RCoreTattoosCompatibility and store.type == "tattoo" then
+        return
+    end
+
     if Config.UseRadialMenu or store.usePoly then
         return lib.zones.poly({
             points = store.points,
@@ -1006,6 +1037,7 @@ local function SetupZone(store, onEnter, onExit)
     return lib.zones.box({
         coords = store.coords,
         size = store.size,
+        rotation = store.rotation,
         debug = Config.Debug,
         onEnter = onEnter,
         onExit = onExit
@@ -1013,21 +1045,18 @@ local function SetupZone(store, onEnter, onExit)
 end
 
 local function SetupStoreZones()
-    Zones.Store = {}
     for _, v in pairs(Config.Stores) do
         Zones.Store[#Zones.Store + 1] = SetupZone(v, onStoreEnter, onZoneExit)
     end
 end
 
 local function SetupClothingRoomZones()
-    Zones.ClothingRoom = {}
     for _, v in pairs(Config.ClothingRooms) do
         Zones.ClothingRoom[#Zones.ClothingRoom + 1] = SetupZone(v, onClothingRoomEnter, onZoneExit)
     end
 end
 
 local function SetupPlayerOutfitRoomZones()
-    Zones.PlayerOutfitRoom = {}
     for _, v in pairs(Config.PlayerOutfitRooms) do
         Zones.PlayerOutfitRoom[#Zones.PlayerOutfitRoom + 1] = SetupZone(v, onPlayerOutfitRoomEnter, onZoneExit)
     end
@@ -1059,6 +1088,26 @@ local function CreatePedAtCoords(pedModel, coords, scenario)
     return ped
 end
 
+local function SetupStoreTarget(targetConfig, action, k, v)
+    local parameters = {
+        options = {{
+            type = "client",
+            action = action,
+            icon = targetConfig.icon,
+            label = targetConfig.label
+        }},
+        distance = targetConfig.distance,
+        rotation = v.rotation
+    }
+
+    if Config.EnablePedsForShops then
+        TargetPeds.Store[k] = CreatePedAtCoords(v.targetModel or targetConfig.model, v.coords, v.targetScenario or targetConfig.scenario)
+        Target.AddTargetEntity(TargetPeds.Store[k], parameters)
+    else
+        Target.AddBoxZone(v.type .. k, v.coords, v.size, parameters)
+    end
+end
+
 local function SetupStoreTargets()
     for k, v in pairs(Config.Stores) do
         local targetConfig = Config.TargetConfig[v.type]
@@ -1076,27 +1125,8 @@ local function SetupStoreTargets()
             action = OpenSurgeonShop
         end
 
-        local parameters = {
-            options = {{
-                type = "client",
-                action = action,
-                icon = targetConfig.icon,
-                label = targetConfig.label
-            }},
-            distance = targetConfig.distance
-        }
-
-        if Config.EnablePedsForShops then
-            TargetPeds.Store[k] = CreatePedAtCoords(v.targetModel or targetConfig.model, v.coords, v.targetScenario or targetConfig.scenario)
-            exports["qb-target"]:AddTargetEntity(TargetPeds.Store[k], parameters)
-        else
-            exports["qb-target"]:AddBoxZone(v.type .. k, v.coords, v.size.x, v.size.y, {
-                name = v.type .. k,
-                debugPoly = Config.Debug,
-                minZ = v.coords.z - 1,
-                maxZ = v.coords.z + 1,
-                heading = v.coords.w
-            }, parameters)
+        if not (Config.RCoreTattoosCompatibility and v.type == "tattoo") then
+            SetupStoreTarget(targetConfig, action, k, v)
         end
     end
 end
@@ -1119,21 +1149,16 @@ local function SetupClothingRoomTargets()
                 job = v.job,
                 gang = v.gang
             }},
-            distance = targetConfig.distance
+            distance = targetConfig.distance,
+            rotation = v.rotation
         }
 
         if Config.EnablePedsForClothingRooms then
             TargetPeds.ClothingRoom[k] = CreatePedAtCoords(v.targetModel or targetConfig.model, v.coords, v.targetScenario or targetConfig.scenario)
-            exports["qb-target"]:AddTargetEntity(TargetPeds.ClothingRoom[k], parameters)
+            Target.AddTargetEntity(TargetPeds.ClothingRoom[k], parameters)
         else
             local key = "clothing_" .. (v.job or v.gang) .. k
-            exports["qb-target"]:AddBoxZone(key, v.coords, v.size.x, v.size.y, {
-                name = key,
-                debugPoly = Config.Debug,
-                minZ = v.coords.z - 2,
-                maxZ = v.coords.z + 2,
-                heading = v.coords.w
-            }, parameters)
+            Target.AddBoxZone(key, v.coords, v.size, parameters)
         end
     end
 end
@@ -1154,20 +1179,15 @@ local function SetupPlayerOutfitRoomTargets()
                     return isPlayerAllowedForOutfitRoom(v)
                 end
             }},
-            distance = targetConfig.distance
+            distance = targetConfig.distance,
+            rotation = v.rotation
         }
 
         if Config.EnablePedsForPlayerOutfitRooms then
             TargetPeds.PlayerOutfitRoom[k] = CreatePedAtCoords(v.targetModel or targetConfig.model, v.coords, v.targetScenario or targetConfig.scenario)
-            exports["qb-target"]:AddTargetEntity(TargetPeds.ClothingRoom[k], parameters)
+            Target.AddTargetEntity(TargetPeds.ClothingRoom[k], parameters)
         else
-            exports["qb-target"]:AddBoxZone("playeroutfitroom_" .. k, v.coords, v.size.x, v.size.y, {
-                name = "playeroutfitroom_" .. k,
-                debugPoly = Config.Debug,
-                minZ = v.coords.z - 2,
-                maxZ = v.coords.z + 2,
-                heading = v.coords.w
-            }, parameters)
+            Target.AddBoxZone("playeroutfitroom_" .. k, v.coords, v.size, parameters)
         end
     end
 end

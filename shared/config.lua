@@ -7,6 +7,13 @@ Config.BarberCost = 100
 Config.TattooCost = 100
 Config.SurgeonCost = 100
 
+Config.ChargePerTattoo = true -- Charge players per tattoo. Config.TattooCost will become the cost of 1 tattoo. The cost can be overridden by adding `cost` key in shared/tattoos.lua for specific tattoos
+
+-- Only set this to true if you're using rcore_tattoos
+Config.RCoreTattoosCompatibility = false
+
+Config.AsynchronousLoading = false -- Change this to false if you want the NUI data to load before displaying the appearance UI
+
 Config.UseTarget = false
 
 Config.TextUIOptions = {
@@ -16,6 +23,8 @@ Config.TextUIOptions = {
 Config.NotifyOptions = {
     position = "top-right"
 }
+
+Config.OutfitCodeLength = 10
 
 Config.UseRadialMenu = false
 
@@ -27,9 +36,12 @@ Config.EnablePedMenu = true
 Config.PedMenuGroup = "admin"
 
 Config.ShowNearestShopOnly = false
+Config.HideRadar = false -- Hides the minimap while the appearance menu is open
 Config.NearestShopBlipUpdateDelay = 10000
 
 Config.InvincibleDuringCustomization = true
+
+Config.PreventTrackerRemoval = true -- Disables "Scarf and Chains" section if the player has tracker
 
 Config.NewCharacterSections = {
     Ped = true,
@@ -51,6 +63,8 @@ Config.OnDutyOnlyClothingRooms = false -- Set to `true` to make the clothing roo
 Config.BossManagedOutfits = false -- Allows Job / Gang bosses to manage their own job / gang outfits
 
 Config.ReloadSkinCooldown = 5000
+
+Config.AutomaticFade = false -- Enables automatic fading and hides the Fade section from Hair
 
 -- ACE Permissions Config
 Config.EnableACEPermissions = false
@@ -581,7 +595,7 @@ Config.PlayerOutfitRooms = {
 
 Config.Outfits = {
     ["police"] = {
-        ["male"] = {
+        ["Male"] = {
             {
                 name = "Short Sleeve",
                 outfitData = {
@@ -667,7 +681,7 @@ Config.Outfits = {
                 grades = {3, 4},
             }
         },
-        ["female"] = {
+        ["Female"] = {
             {
                 name = "Short Sleeve",
                 outfitData = {
@@ -756,7 +770,7 @@ Config.Outfits = {
         }
     },
     ["realestate"] = {
-        ["male"] = {
+        ["Male"] = {
             {
                 -- Outfits
                 name = "Worker",
@@ -776,7 +790,7 @@ Config.Outfits = {
                 grades = {0, 1, 2, 3, 4},
             }
         },
-        ["female"] = {
+        ["Female"] = {
             {
                 name = "Worker",
                 outfitData = {
@@ -797,7 +811,7 @@ Config.Outfits = {
         }
     },
     ["ambulance"] = {
-        ["male"] = {
+        ["Male"] = {
             {
                 name = "T-Shirt",
                 outfitData = {
@@ -856,7 +870,7 @@ Config.Outfits = {
                 grades = {3, 4},
             }
         },
-        ["female"] = {
+        ["Female"] = {
             {
                 name = "T-Shirt",
                 outfitData = {

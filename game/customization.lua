@@ -6,11 +6,11 @@ local function getRgbColors()
         makeUp = {}
     }
 
-    for i = 0, GetNumHairColors() do
+    for i = 0, GetNumHairColors() - 1 do
         colors.hair[i+1] = {GetPedHairRgbColor(i)}
     end
 
-    for i = 0, GetNumMakeupColors() do
+    for i = 0, GetNumMakeupColors() - 1 do
         colors.makeUp[i+1] = {GetPedMakeupRgbColor(i)}
     end
 
@@ -257,7 +257,12 @@ local function getAppearanceSettings()
     }
 
     local tattoos = {
-        items = filterTattoosByGender(Config.Tattoos)
+        items = filterTattoosByGender(Config.Tattoos),
+        opacity = {
+            min = 0.1,
+            max = 1,
+            factor = 0.1,
+        }
     }
 
     local components = {}
@@ -534,17 +539,14 @@ client.removeClothes = removeClothes
 local playerHeading
 function client.getHeading() return playerHeading end
 
-local playerArmour
-
-
-local toggleRadar = GetConvarInt("illenium-appearance:radar", 1) == 1
 local callback
 function client.startPlayerCustomization(cb, conf)
     local playerPed = PlayerPedId()
     playerAppearance = client.getPedAppearance(playerPed)
     playerCoords = GetEntityCoords(playerPed, true)
     playerHeading = GetEntityHeading(playerPed)
-    playerArmour = GetPedArmour(playerPed)
+
+    BackupPlayerStats()
 
     callback = cb
     config = conf
@@ -558,11 +560,13 @@ function client.startPlayerCustomization(cb, conf)
     SetEntityInvincible(playerPed, Config.InvincibleDuringCustomization)
     TaskStandStill(playerPed, -1)
 
-    if toggleRadar then DisplayRadar(false) end
+    if Config.HideRadar then DisplayRadar(false) end
 
     SendNuiMessage(json.encode({
         type = "appearance_display",
-        payload = {}
+        payload = {
+            asynchronous = Config.AsynchronousLoading
+        }
     }))
 end
 
@@ -571,7 +575,7 @@ function client.exitPlayerCustomization(appearance)
     DestroyCam(cameraHandle, false)
     SetNuiFocus(false, false)
 
-    if toggleRadar then DisplayRadar(true) end
+    if Config.HideRadar then DisplayRadar(true) end
 
     local playerPed = PlayerPedId()
 
@@ -589,7 +593,7 @@ function client.exitPlayerCustomization(appearance)
         client.setPedTattoos(playerPed, appearance.tattoos)
     end
 
-    SetPedArmour(PlayerPedId(), playerArmour)
+    RestorePlayerStats()
 
     if callback then
         callback(appearance)

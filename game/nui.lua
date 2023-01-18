@@ -4,14 +4,17 @@ RegisterNUICallback("appearance_get_locales", function(_, cb)
     cb(Locales[GetConvar("illenium-appearance:locale", "en")])
 end)
 
-RegisterNUICallback("appearance_get_settings_and_data", function(_, cb)
-    TriggerEvent("illenium-appearance:server:GetPlayerAces")
+RegisterNUICallback("appearance_get_settings", function(_, cb)
+    cb({ appearanceSettings = client.getAppearanceSettings() })
+end)
+
+RegisterNUICallback("appearance_get_data", function(_, cb)
     Wait(250)
     local appearanceData = client.getAppearance()
     if appearanceData.tattoos then
         client.setPedTattoos(PlayerPedId(), appearanceData.tattoos)
     end
-    cb({ config = client.getConfig(), appearanceData = appearanceData, appearanceSettings = client.getAppearanceSettings() })
+    cb({ config = client.getConfig(), appearanceData = appearanceData })
 end)
 
 RegisterNUICallback("appearance_set_camera", function(camera, cb)
@@ -81,8 +84,11 @@ RegisterNUICallback("appearance_change_eye_color", function(eyeColor, cb)
 end)
 
 RegisterNUICallback("appearance_apply_tattoo", function(data, cb)
-    cb(1)
-    client.addPedTattoo(PlayerPedId(), data)
+    local paid = not data.tattoo or not Config.ChargePerTattoo or lib.callback.await("illenium-appearance:server:payForTattoo", false, data.tattoo)
+    if paid then
+        client.addPedTattoo(PlayerPedId(), data.updatedTattoos or data)
+    end
+    cb(paid)
 end)
 
 RegisterNUICallback("appearance_preview_tattoo", function(previewTattoo, cb)

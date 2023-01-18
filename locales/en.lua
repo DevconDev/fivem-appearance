@@ -123,7 +123,8 @@ Locales["en"] = {
         shirt = "Shirt",
         bodyArmor = "Body armor",
         decals = "Decals",
-        jackets = "Jackets"
+        jackets = "Jackets",
+        head = "Head"
     },
     props = {
         title = "Props",
@@ -147,6 +148,7 @@ Locales["en"] = {
         },
         apply = "Apply",
         delete = "Remove",
-        deleteAll = "Remove all Tattoos"
+        deleteAll = "Remove all Tattoos",
+        opacity = "Opacity"
     }
 }
