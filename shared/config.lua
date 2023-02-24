@@ -33,7 +33,7 @@ Config.EnablePedsForClothingRooms = true
 Config.EnablePedsForPlayerOutfitRooms = true
 
 Config.EnablePedMenu = true
-Config.PedMenuGroup = "admin"
+Config.PedMenuGroup = "group.admin"
 
 Config.ShowNearestShopOnly = false
 Config.HideRadar = false -- Hides the minimap while the appearance menu is open
@@ -934,6 +934,7 @@ Config.Outfits = {
 
 Config.InitialPlayerClothes = {
     Male = {
+        Model = "mp_m_freemode_01",
         Components = {
             {
                 component_id = 0, -- Face
@@ -1031,6 +1032,7 @@ Config.InitialPlayerClothes = {
         }
     },
     Female = {
+        Model = "mp_f_freemode_01",
         Components = {
             {
                 component_id = 0, -- Face

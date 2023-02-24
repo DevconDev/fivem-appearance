@@ -58,7 +58,7 @@ local function listContainsAny(items, containedItems)
 end
 
 local function allowedForPlayer(item, allowedAces)
-    return (item.jobs and listContains(item.jobs, client.job.name)) or (item.gangs and listContains(item.gangs, client.gang.name)) or (item.aces and listContainsAny(item.aces, allowedAces))
+    return (item.jobs and listContains(item.jobs, client.job.name)) or (item.gangs and listContains(item.gangs, client.gang.name)) or (item.aces and listContainsAny(item.aces, allowedAces) or (item.citizenids and listContains(item.citizenids, client.citizenid)))
 end
 
 local function filterPedModelsForPlayer(pedConfigs)
@@ -67,7 +67,7 @@ local function filterPedModelsForPlayer(pedConfigs)
 
     for i = 1, #pedConfigs do
         local config = pedConfigs[i]
-        if (not config.jobs and not config.gangs and not config.aces) or allowedForPlayer(config, allowedAces) then
+        if (not config.jobs and not config.gangs and not config.aces and not config.citizenids) or allowedForPlayer(config, allowedAces) then
             for j = 1, #config.peds do
                 playerPeds[#playerPeds + 1] = config.peds[j]
             end
